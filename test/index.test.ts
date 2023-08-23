@@ -1,8 +1,6 @@
-const axios = require('axios');
+import fetchMock from 'jest-fetch-mock';
 
-const QuickChart = require('../index');
-
-jest.mock('axios');
+import QuickChart from '../src/index';
 
 test('basic chart, no auth', () => {
   const qc = new QuickChart();
@@ -15,6 +13,53 @@ test('basic chart, no auth', () => {
   expect(qc.getUrl()).toContain('/chart?');
   expect(qc.getUrl()).toContain('w=500');
   expect(qc.getUrl()).toContain('h=300');
+});
+
+test('basic chart with custom host', () => {
+  const qc = new QuickChart();
+  qc.setHost('foo.com');
+  qc.setScheme('http');
+  qc.setConfig({
+    type: 'bar',
+    data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
+  });
+
+  expect(qc.getUrl()).toContain('http://foo.com/chart?');
+  expect(qc.getUrl()).toContain('Hello+world');
+  expect(qc.getUrl()).toContain('w=500');
+  expect(qc.getUrl()).toContain('h=300');
+});
+
+test('basic chart with auth', () => {
+  const qc = new QuickChart('abc123', '12345');
+  qc.setConfig({
+    type: 'bar',
+    data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
+  });
+
+  expect(qc.getUrl()).toContain('Hello+world');
+  expect(qc.getUrl()).toContain('/chart?');
+  expect(qc.getUrl()).toContain('w=500');
+  expect(qc.getUrl()).toContain('h=300');
+  expect(qc.getUrl()).toContain('key=abc123');
+});
+
+test('basic chart with auth, signed', () => {
+  const qc = new QuickChart('abc123', '12345');
+  qc.setConfig({
+    type: 'bar',
+    data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
+  });
+
+  const url = qc.getSignedUrl();
+  expect(url).toContain('Hello+world');
+  expect(url).toContain('/chart?');
+  expect(url).toContain('w=500');
+  expect(url).toContain('h=300');
+
+  expect(url).not.toContain('key=');
+  expect(url).toContain('accountId=12345');
+  expect(url).toContain('sig=');
 });
 
 test('basic chart, string', () => {
@@ -101,6 +146,7 @@ test('js chart', () => {
         yAxes: [
           {
             ticks: {
+              // @ts-ignore
               callback: function (value) {
                 return '$' + value;
               },
@@ -129,6 +175,23 @@ test('postdata for basic chart, no auth', () => {
   expect(postData.format).toEqual('png');
   expect(postData.backgroundColor).toEqual('#ffffff');
   expect(postData.devicePixelRatio).toBeCloseTo(1);
+});
+
+test('postdata for basic chart with auth', () => {
+  const qc = new QuickChart('abc123', '12345');
+  qc.setConfig({
+    type: 'bar',
+    data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
+  });
+
+  const postData = qc.getPostData();
+  expect(postData.chart).toContain('Hello world');
+  expect(postData.width).toEqual(500);
+  expect(postData.height).toEqual(300);
+  expect(postData.format).toEqual('png');
+  expect(postData.backgroundColor).toEqual('#ffffff');
+  expect(postData.devicePixelRatio).toBeCloseTo(1);
+  expect(postData.key).toEqual('abc123');
 });
 
 test('postdata for basic chart with params', () => {
@@ -171,6 +234,7 @@ test('postdata for js chart', () => {
         yAxes: [
           {
             ticks: {
+              // @ts-ignore
               callback: function (value) {
                 return '$' + value;
               },
@@ -198,13 +262,10 @@ test('postdata for js chart', () => {
 
 test('getShortUrl for chart, no auth', async () => {
   const mockResp = {
-    status: 200,
-    data: {
-      success: true,
-      url: 'https://quickchart.io/chart/render/9a560ba4-ab71-4d1e-89ea-ce4741e9d232',
-    },
+    success: true,
+    url: 'https://quickchart.io/chart/render/9a560ba4-ab71-4d1e-89ea-ce4741e9d232',
   };
-  axios.post.mockImplementationOnce(() => Promise.resolve(mockResp));
+  fetchMock.mockResponseOnce(JSON.stringify(mockResp));
 
   const qc = new QuickChart();
   qc.setConfig({
@@ -212,15 +273,27 @@ test('getShortUrl for chart, no auth', async () => {
     data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
   });
 
-  await expect(qc.getShortUrl()).resolves.toEqual(mockResp.data.url);
-  expect(axios.post).toHaveBeenCalled();
+  await expect(qc.getShortUrl()).resolves.toEqual(mockResp.url);
+});
+
+test('getShortUrl for chart js error', async () => {
+  fetchMock.mockResponseOnce(() => {
+    throw new Error('Request timed out');
+  });
+
+  const qc = new QuickChart();
+  qc.setConfig({
+    type: 'bar',
+    data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
+  });
+
+  await expect(qc.getShortUrl()).rejects.toThrow('Request timed out');
 });
 
 test('getShortUrl for chart bad status code', async () => {
-  const mockResp = {
+  fetchMock.mockResponseOnce('', {
     status: 502,
-  };
-  axios.post.mockImplementationOnce(() => Promise.resolve(mockResp));
+  });
 
   const qc = new QuickChart();
   qc.setConfig({
@@ -228,18 +301,32 @@ test('getShortUrl for chart bad status code', async () => {
     data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
   });
 
-  await expect(qc.getShortUrl()).rejects.toContain('Bad response code');
-  expect(axios.post).toHaveBeenCalled();
+  await expect(qc.getShortUrl()).rejects.toThrow('failed with status code');
+});
+
+test('getShortUrl for chart bad status code with error detail', async () => {
+  fetchMock.mockResponseOnce('', {
+    status: 400,
+    headers: {
+      'x-quickchart-error': 'foo bar',
+    },
+  });
+
+  const qc = new QuickChart();
+  qc.setConfig({
+    type: 'bar',
+    data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
+  });
+
+  await expect(qc.getShortUrl()).rejects.toThrow('foo bar');
 });
 
 test('getShortUrl api failure', async () => {
-  const mockResp = {
-    status: 200,
-    data: {
+  fetchMock.mockResponseOnce(
+    JSON.stringify({
       success: false,
-    },
-  };
-  axios.post.mockImplementationOnce(() => Promise.resolve(mockResp));
+    }),
+  );
 
   const qc = new QuickChart();
   qc.setConfig({
@@ -247,16 +334,14 @@ test('getShortUrl api failure', async () => {
     data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
   });
 
-  await expect(qc.getShortUrl()).rejects.toContain('failure response');
-  expect(axios.post).toHaveBeenCalled();
+  await expect(qc.getShortUrl()).rejects.toThrow('failure response');
+  expect(fetch).toHaveBeenCalled();
 });
 
 test('toBinary, no auth', async () => {
-  const mockResp = {
-    status: 200,
-    data: Buffer.from('bWVvdw==', 'base64'),
-  };
-  axios.post.mockImplementationOnce(() => Promise.resolve(mockResp));
+  const mockData = Buffer.from('bWVvdw==', 'base64');
+  // https://github.com/jefflau/jest-fetch-mock/issues/218
+  fetchMock.mockResponseOnce(() => Promise.resolve({ body: mockData as unknown as string }));
 
   const qc = new QuickChart();
   qc.setConfig({
@@ -264,16 +349,13 @@ test('toBinary, no auth', async () => {
     data: { labels: ['Hello world', 'Foo bar'], datasets: [{ label: 'Foo', data: [1, 2] }] },
   });
 
-  await expect(qc.toBinary()).resolves.toEqual(mockResp.data);
-  expect(axios.post).toHaveBeenCalled();
+  await expect(qc.toBinary()).resolves.toEqual(mockData);
 });
 
-test('toBinary, no auth', async () => {
-  const mockResp = {
-    status: 200,
-    data: Buffer.from('bWVvdw==', 'base64'),
-  };
-  axios.post.mockImplementationOnce(() => Promise.resolve(mockResp));
+test('toDataUrl, no auth', async () => {
+  fetchMock.mockResponseOnce(() =>
+    Promise.resolve({ body: Buffer.from('bWVvdw==', 'base64') as unknown as string }),
+  );
 
   const qc = new QuickChart();
   qc.setConfig({
@@ -282,7 +364,6 @@ test('toBinary, no auth', async () => {
   });
 
   await expect(qc.toDataUrl()).resolves.toEqual('data:image/png;base64,bWVvdw==');
-  expect(axios.post).toHaveBeenCalled();
 });
 
 test('no chart specified throws error', async () => {

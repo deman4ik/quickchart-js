@@ -1,6 +1,7 @@
 QuickChart for Javascript
 ---
 [![npm](https://img.shields.io/npm/v/quickchart-js)](https://www.npmjs.com/package/quickchart-js)
+[![npm](https://img.shields.io/npm/dt/quickchart-js)](https://www.npmjs.com/package/quickchart-js)
 [![Build Status](https://travis-ci.com/typpo/quickchart-js.svg?branch=master)](https://travis-ci.com/typpo/quickchart-js)
 
 This is a Javascript client for [quickchart.io](https://quickchart.io), a web service for generating static charts.  View the main QuickChart repository [here](https://github.com/typpo/quickchart).
@@ -50,6 +51,20 @@ The URLs produce this chart image:
 
 <img src="https://quickchart.io/chart?c=%7Btype%3A%27bar%27%2Cdata%3A%7Blabels%3A%5B%27Hello+world%27%2C%27Foo+bar%27%5D%2Cdatasets%3A%5B%7Blabel%3A%27Foo%27%2Cdata%3A%5B1%2C2%5D%7D%5D%7D%7D&w=500&h=300&bkg=transparent&f=png" width=500 />
 
+## Creating a QuickChart object
+
+If you have an account ID and API key, authenticate using the QuickChart constructor:
+
+```js
+const qc = new QuickChart(apiKey, accountId);
+```
+
+To use the free (community) version, leave it blank:
+
+```js
+const qc = new QuickChart();
+```
+
 ## Customizing your chart
 
 ### setConfig(chart: Object | string)
@@ -80,6 +95,14 @@ Sets the device pixel ratio of the chart.  This will multiply the number of pixe
 
 Sets the Chart.js version to use (e.g. `2.9.4` or `3.4.0`).  Valid options are shown in the [documentation](https://quickchart.io/documentation/#parameters).
 
+### setHost(host: string)
+
+Sets the host of generated URLs.  `quickchart.io` by default.
+
+### setScheme(scheme: string)
+
+Sets the scheme of generated URLs.  `https` by default.
+
 ## Getting outputs
 
 There are two ways to get a URL for your chart object.
@@ -94,6 +117,10 @@ Uses the quickchart.io web service to create a fixed-length chart URL that displ
 
 Note that short URLs expire after a few days for users of the free service.  You can [subscribe](https://quickchart.io/pricing/) to keep them around longer.
 
+### getSignedUrl(): string
+
+Returns a URL that displays the chart image. It is signed with your user account to bypass rate limitations.
+
 ### toBinary(): Promise<Buffer>
 
 Creates a binary buffer that contains your chart image.
@@ -102,9 +129,9 @@ Creates a binary buffer that contains your chart image.
 
 Returns a base 64 data URL beginning with `data:image/png;base64`.
 
-### toFile(pathOrDescriptor: string): Promise
+### toFile(pathOrDescriptor: PathLike | FileHandle): Promise
 
-Creates a file containing your chart image.
+Given a filepath string or a writable file handle, creates a file containing your chart image.
 
 ## More examples
 
@@ -179,7 +206,7 @@ printShortUrl();
 
 QuickChart has builtin functions: `getImageFill`, `getGradientFill`, `getGradientFillHelper`, and `pattern.draw`.  These functions can be accessed via the `QuickChart` class.  For example:
 
-```
+```js
 const qc = new QuickChart();
 qc.setConfig({
   type: 'bar',
@@ -194,4 +221,28 @@ qc.setConfig({
     ],
   },
 });
+```
+
+# Building the library
+
+To build this library locally, run:
+
+```
+yarn build
+```
+
+To run tests:
+
+```
+yarn test
+```
+
+If you're editing the library and running examples, you may want to continuously build the library in the background:
+
+```
+yarn build:watch
+
+# ...
+
+node examples/simple_example.js
 ```
